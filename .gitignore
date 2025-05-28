@@ -34,6 +34,7 @@ server
 
 # CMake
 CMakeLists.txt.user
+CMakeUserPresets.json
 CMakeCache.txt
 CMakeFiles
 CMakeScripts
@@ -47,3 +48,8 @@ _deps
 
 build/
 vcpkg_installed
+
+*.ilk
+*.pdb
+.vscode
+.vs
