@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sstream>
+#include <vector>
 
 int main(int argc, char **argv) {
 	// Flush after every std::cout / std::cerr
@@ -77,21 +78,52 @@ int main(int argc, char **argv) {
 
 	std::string s(buffer, bytes_received);
 
+	std::istringstream ss(s);
+
+	std::string request_type, request_target, http_version;
+
+	ss >> request_type >> request_target >> http_version;
+
+	std::string request_line;
+	std::vector<std::string> headers;
+	std::string request_body;
+
 	size_t pos = 0;
+	int item_no = 0;
 	while (true)
 	{
 		size_t end = s.find("\r\n", pos);
 
 		if (end == std::string::npos) {
-			std::cout << "Line: " << s.substr(pos) << std::endl;
+
+			request_body = s.substr(pos);
+			item_no = 2;
 			break;
 		}
 
-		std::cout << "Line: " << s.substr(pos, end-pos) << std::endl;
+		if (item_no == 0)
+		{
+			request_line = s.substr(pos, end - pos);
+			item_no = 1;
+		}
+		else if (item_no == 1)
+		{
+			headers.push_back(s.substr(pos, end - pos));
+		}
+
 		pos = end + 2;
 	}
 
-	std::string response = "HTTP/1.1 200 OK\r\n\r\n";
+	std::string response;
+
+	if (request_target == "/")
+	{
+		response = "HTTP/1.1 200 OK\r\n\r\n";
+	}
+	else
+	{
+		response = "HTTP/1.1 404 Not Found\r\n\r\n";
+	}
 
 	ssize_t bytes_sent = send(client_socket, response.c_str(), response.size(), 0);
 
