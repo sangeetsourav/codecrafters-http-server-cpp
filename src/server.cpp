@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <sstream>
 #include <vector>
+#include <regex>
 
 int main(int argc, char **argv) {
 	// Flush after every std::cout / std::cerr
@@ -76,58 +77,72 @@ int main(int argc, char **argv) {
 	// Add null termination
 	buffer[bytes_received] = '\0';
 
+	// Convert request to string
 	std::string s(buffer, bytes_received);
 
 	std::istringstream ss(s);
 
 	std::string request_type, request_target, http_version;
 
+	// The following are the first three space delimited tokens
 	ss >> request_type >> request_target >> http_version;
 
-	std::string request_line;
-	std::vector<std::string> headers;
-	std::string request_body;
-
-	size_t pos = 0;
-	int item_no = 0;
-	while (true)
-	{
-		size_t end = s.find("\r\n", pos);
-
-		if (end == std::string::npos) {
-
-			request_body = s.substr(pos);
-			item_no = 2;
-			break;
-		}
-
-		if (item_no == 0)
-		{
-			request_line = s.substr(pos, end - pos);
-			item_no = 1;
-		}
-		else if (item_no == 1)
-		{
-			headers.push_back(s.substr(pos, end - pos));
-		}
-
-		pos = end + 2;
-	}
-
 	std::string response;
+	
+	// Regex to capture /echo/{string}
+	std::regex r(R"(\/echo\/(.*))");
+	std::smatch match;
 
 	if (request_target == "/")
 	{
 		response = "HTTP/1.1 200 OK\r\n\r\n";
+	}
+	else if (std::regex_match(request_target, match, r))
+	{
+		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
+			+ std::to_string(match[1].str().size())
+			+ std::string("\r\n\r\n") + match[1].str();
 	}
 	else
 	{
 		response = "HTTP/1.1 404 Not Found\r\n\r\n";
 	}
 
+	// Send response back
 	ssize_t bytes_sent = send(client_socket, response.c_str(), response.size(), 0);
 
 	close(client_socket); // Done with this client
 
 	return 0;
 }
+
+
+//std::string request_line;
+//std::vector<std::string> headers;
+//std::string request_body;
+//
+//size_t pos = 0;
+//int item_no = 0;
+//while (true)
+//{
+//	size_t end = s.find("\r\n", pos);
+//
+//	if (end == std::string::npos) {
+//
+//		request_body = s.substr(pos);
+//		item_no = 2;
+//		break;
+//	}
+//
+//	if (item_no == 0)
+//	{
+//		request_line = s.substr(pos, end - pos);
+//		item_no = 1;
+//	}
+//	else if (item_no == 1)
+//	{
+//		headers.push_back(s.substr(pos, end - pos));
+//	}
+//
+//	pos = end + 2;
+//}
