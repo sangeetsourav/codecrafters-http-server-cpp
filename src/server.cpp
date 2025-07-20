@@ -78,9 +78,9 @@ int main(int argc, char **argv) {
 	buffer[bytes_received] = '\0';
 
 	// Convert request to string
-	std::string s(buffer, bytes_received);
+	std::string complete_request(buffer, bytes_received);
 
-	std::istringstream ss(s);
+	std::istringstream ss(complete_request);
 
 	std::string request_type, request_target, http_version;
 
@@ -90,14 +90,22 @@ int main(int argc, char **argv) {
 	std::string response;
 	
 	// Regex to capture /echo/{string}
-	std::regex r(R"(\/echo\/(.*))");
+	std::regex echo_endpt(R"(\/echo\/(.*))");
+	// Regex to capture user-agent
+	std::regex user_agent_endpt(R"(user-agent: (.*)\r\n)", std::regex::icase);
 	std::smatch match;
 
 	if (request_target == "/")
 	{
 		response = "HTTP/1.1 200 OK\r\n\r\n";
 	}
-	else if (std::regex_match(request_target, match, r))
+	else if (std::regex_match(request_target, match, echo_endpt))
+	{
+		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
+			+ std::to_string(match[1].str().size())
+			+ std::string("\r\n\r\n") + match[1].str();
+	}
+	else if (std::regex_search(complete_request, match, user_agent_endpt))
 	{
 		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
 			+ std::to_string(match[1].str().size())
