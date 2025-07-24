@@ -10,6 +10,60 @@
 #include <sstream>
 #include <vector>
 #include <regex>
+#include <thread>
+
+void process_request(int client_socket)
+{
+	// Buffer variable where the data is temporarily stored
+	char buffer[4096];
+	ssize_t bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+	// Add null termination
+	buffer[bytes_received] = '\0';
+
+	// Convert request to string
+	std::string complete_request(buffer, bytes_received);
+
+	std::istringstream ss(complete_request);
+
+	std::string request_type, request_target, http_version;
+
+	// The following are the first three space delimited tokens
+	ss >> request_type >> request_target >> http_version;
+
+	std::string response;
+
+	// Regex to capture /echo/{string}
+	std::regex echo_endpt(R"(\/echo\/(.*))");
+	// Regex to capture user-agent
+	std::regex user_agent_endpt(R"(user-agent: (.*)\r\n)", std::regex::icase);
+	std::smatch match;
+
+	if (request_target == "/")
+	{
+		response = "HTTP/1.1 200 OK\r\n\r\n";
+	}
+	else if (std::regex_match(request_target, match, echo_endpt))
+	{
+		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
+			+ std::to_string(match[1].str().size())
+			+ std::string("\r\n\r\n") + match[1].str();
+	}
+	else if (std::regex_search(complete_request, match, user_agent_endpt))
+	{
+		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
+			+ std::to_string(match[1].str().size())
+			+ std::string("\r\n\r\n") + match[1].str();
+	}
+	else
+	{
+		response = "HTTP/1.1 404 Not Found\r\n\r\n";
+	}
+
+	// Send response back
+	ssize_t bytes_sent = send(client_socket, response.c_str(), response.size(), 0);
+
+	close(client_socket); // Done with this client
+}
 
 int main(int argc, char **argv) {
 	// Flush after every std::cout / std::cerr
@@ -63,63 +117,18 @@ int main(int argc, char **argv) {
 	struct sockaddr_in client_addr;
 	int client_addr_len = sizeof(client_addr);
   
-	std::cout << "Waiting for a client to connect...\n";
+	std::cout << "Waiting for clients to connect...\n";
 	
-	// Accept incoming connection and create a new socket that will communicate
-	int client_socket = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
-	std::cout << "Client connected\n";
+	while (true)
+	{
+		// Accept incoming connection and create a new socket that will communicate
+		int client_socket = accept(server_fd, (struct sockaddr*)&client_addr, (socklen_t*)&client_addr_len);
+		std::cout << "Client connected. Creating a thread to handle this\n";
+		std::thread worker(process_request, client_socket);
+		worker.detach();
+	}
 
 	close(server_fd);
-
-	// Buffer variable where the data is temporarily stored
-	char buffer[4096];
-	ssize_t bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-	// Add null termination
-	buffer[bytes_received] = '\0';
-
-	// Convert request to string
-	std::string complete_request(buffer, bytes_received);
-
-	std::istringstream ss(complete_request);
-
-	std::string request_type, request_target, http_version;
-
-	// The following are the first three space delimited tokens
-	ss >> request_type >> request_target >> http_version;
-
-	std::string response;
-	
-	// Regex to capture /echo/{string}
-	std::regex echo_endpt(R"(\/echo\/(.*))");
-	// Regex to capture user-agent
-	std::regex user_agent_endpt(R"(user-agent: (.*)\r\n)", std::regex::icase);
-	std::smatch match;
-
-	if (request_target == "/")
-	{
-		response = "HTTP/1.1 200 OK\r\n\r\n";
-	}
-	else if (std::regex_match(request_target, match, echo_endpt))
-	{
-		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
-			+ std::to_string(match[1].str().size())
-			+ std::string("\r\n\r\n") + match[1].str();
-	}
-	else if (std::regex_search(complete_request, match, user_agent_endpt))
-	{
-		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
-			+ std::to_string(match[1].str().size())
-			+ std::string("\r\n\r\n") + match[1].str();
-	}
-	else
-	{
-		response = "HTTP/1.1 404 Not Found\r\n\r\n";
-	}
-
-	// Send response back
-	ssize_t bytes_sent = send(client_socket, response.c_str(), response.size(), 0);
-
-	close(client_socket); // Done with this client
 
 	return 0;
 }
