@@ -11,12 +11,16 @@
 #include <vector>
 #include <regex>
 #include <thread>
+#include <filesystem>
+#include <fstream>
 
-void process_request(int client_socket)
+void process_request(int client_socket, std::string files_endpt_dir)
 {
 	// Buffer variable where the data is temporarily stored
 	char buffer[4096];
+
 	ssize_t bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+
 	// Add null termination
 	buffer[bytes_received] = '\0';
 
@@ -36,6 +40,8 @@ void process_request(int client_socket)
 	std::regex echo_endpt(R"(\/echo\/(.*))");
 	// Regex to capture user-agent
 	std::regex user_agent_endpt(R"(user-agent: (.*)\r\n)", std::regex::icase);
+	// Regex to capture /files/{filename}
+	std::regex files_endpt(R"(\/files\/(.*))");
 	std::smatch match;
 
 	if (request_target == "/")
@@ -47,6 +53,32 @@ void process_request(int client_socket)
 		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
 			+ std::to_string(match[1].str().size())
 			+ std::string("\r\n\r\n") + match[1].str();
+	}
+	else if (std::regex_match(request_target, match, files_endpt))
+	{
+		std::filesystem::path file_path = std::filesystem::path(files_endpt_dir) / std::filesystem::path(match[1].str());
+		
+		if (std::filesystem::exists(file_path))
+		{
+			std::uintmax_t fileSize = std::filesystem::file_size(file_path);
+
+			response = std::string("HTTP/1.1 200 OK\r\nContent-Type:application/octet-stream\r\nContent-Length: ")
+				+ std::to_string(fileSize)
+				+ std::string("\r\n\r\n");
+
+			std::ifstream file(file_path.c_str());
+			std::string str;
+			while (std::getline(file, str))
+			{
+				response += str;
+			}
+
+		}
+		else
+		{
+			response = "HTTP/1.1 404 Not Found\r\n\r\n";
+		}
+		
 	}
 	else if (std::regex_search(complete_request, match, user_agent_endpt))
 	{
@@ -72,6 +104,19 @@ int main(int argc, char **argv) {
   
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	std::cout << "Logs from your program will appear here!\n";
+
+	std::string directory = "";
+
+	if (argc==3)
+	{
+		if (strcmp(argv[1], "--directory") == 0)
+		{
+			directory = argv[2];
+		}
+	}
+
+	std::cout << directory << "\n";
+
 	
 	// AF_INET is IPv4
 	// SOCK_STREAM means we are using TCP and not UDP
@@ -123,8 +168,10 @@ int main(int argc, char **argv) {
 	{
 		// Accept incoming connection and create a new socket that will communicate
 		int client_socket = accept(server_fd, (struct sockaddr*)&client_addr, (socklen_t*)&client_addr_len);
+
 		std::cout << "Client connected. Creating a thread to handle this\n";
-		std::thread worker(process_request, client_socket);
+		
+		std::thread worker(process_request, client_socket, directory);
 		worker.detach();
 	}
 
@@ -132,34 +179,3 @@ int main(int argc, char **argv) {
 
 	return 0;
 }
-
-
-//std::string request_line;
-//std::vector<std::string> headers;
-//std::string request_body;
-//
-//size_t pos = 0;
-//int item_no = 0;
-//while (true)
-//{
-//	size_t end = s.find("\r\n", pos);
-//
-//	if (end == std::string::npos) {
-//
-//		request_body = s.substr(pos);
-//		item_no = 2;
-//		break;
-//	}
-//
-//	if (item_no == 0)
-//	{
-//		request_line = s.substr(pos, end - pos);
-//		item_no = 1;
-//	}
-//	else if (item_no == 1)
-//	{
-//		headers.push_back(s.substr(pos, end - pos));
-//	}
-//
-//	pos = end + 2;
-//}
