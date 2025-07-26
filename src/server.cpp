@@ -14,6 +14,27 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <zlib.h>
+
+std::string gzip_compress(const std::string& str) {
+	z_stream zs = { 0 };
+	deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8, Z_DEFAULT_STRATEGY);
+
+	zs.next_in = (Bytef*)str.data();
+	zs.avail_in = str.size();
+
+	std::string out;
+	char buffer[32768];
+	do {
+		zs.next_out = (Bytef*)buffer;
+		zs.avail_out = sizeof(buffer);
+		deflate(&zs, Z_FINISH);
+		out.append(buffer, sizeof(buffer) - zs.avail_out);
+	} while (zs.avail_out == 0);
+
+	deflateEnd(&zs);
+	return out;
+}
 
 std::map<std::string, std::string> parse_http_request(std::string request, std::string files_endpt_dir)
 {
@@ -68,8 +89,28 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 	else if (std::regex_match(request_target, match, echo_endpt))
 	{
 		http_info["Content-Type"] = "Content-Type: text/plain";
-		http_info["Content-Length"] = "Content-Length: " + std::to_string(match[1].str().size());
-		http_info["response_body"] = match[1].str();
+
+		std::smatch match1;
+
+		if (std::regex_search(request, match1, accept_encoding_val))
+		{
+			std::string encodings = match1[1].str();
+			if (std::regex_search(encodings, match1, std::regex(R"(gzip)")))
+			{
+				http_info["encoding"] = "\r\nContent-Encoding: gzip";
+			}
+		}
+
+		if (http_info["encoding"] != "")
+		{
+			http_info["response_body"] = gzip_compress(match[1].str());
+			http_info["Content-Length"] = "Content-Length: " + std::to_string(http_info["response_body"].size());
+		}
+		else
+		{
+			http_info["response_body"] = match[1].str();
+			http_info["Content-Length"] = "Content-Length: " + std::to_string(match[1].str().size());
+		}
 		http_info["status_code"] = " 200 OK";
 	}
 
@@ -122,15 +163,6 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 
 			http_info["status_code"] = " 201 Created";
 		}
-	}
-
-	if (std::regex_search(request, match, accept_encoding_val))
-	{	
-		std::string encodings = match[1].str();
-		if (std::regex_search(encodings, match, std::regex(R"(gzip)")))
-		{
-			http_info["encoding"] = "\r\nContent-Encoding: gzip";
-		} 
 	}
 
 	http_info["response"] = http_info["http_version"] + http_info["status_code"]
