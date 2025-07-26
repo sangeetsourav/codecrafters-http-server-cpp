@@ -56,7 +56,7 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 	http_info["response_body"] = "";
 	http_info["request_body"] = "";
 	http_info["response"] = "";
-	http_info["status_code"] = " 404 Not Found";
+	http_info["status_code"] = " 404 Not Found\r\n";
 
 	std::string request_status = "";
 
@@ -83,12 +83,12 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 
 	if (http_info["request_target"] == "/")
 	{
-		http_info["status_code"] = " 200 OK";
+		http_info["status_code"] = " 200 OK\r\n";
 	}
 
 	else if (std::regex_match(request_target, match, echo_endpt))
 	{
-		http_info["Content-Type"] = "Content-Type: text/plain";
+		http_info["Content-Type"] = "Content-Type: text/plain\r\n";
 
 		std::smatch match1;
 
@@ -97,46 +97,44 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 			std::string encodings = match1[1].str();
 			if (std::regex_search(encodings, match1, std::regex(R"(gzip)")))
 			{
-				http_info["encoding"] = "\r\nContent-Encoding: gzip";
+				http_info["encoding"] = "Content-Encoding: gzip\r\n";
 			}
 		}
 
 		if (http_info["encoding"] != "")
 		{
 			http_info["response_body"] = gzip_compress(match[1].str());
-			http_info["Content-Length"] = "Content-Length: " + std::to_string(http_info["response_body"].size());
+			http_info["Content-Length"] = "Content-Length: " + std::to_string(http_info["response_body"].size()) + "\r\n";
 		}
 		else
 		{
 			http_info["response_body"] = match[1].str();
-			http_info["Content-Length"] = "Content-Length: " + std::to_string(match[1].str().size());
+			http_info["Content-Length"] = "Content-Length: " + std::to_string(match[1].str().size()) + "\r\n";
 		}
-		http_info["status_code"] = " 200 OK";
+		http_info["status_code"] = " 200 OK\r\n";
 	}
 
 	else if (std::regex_match(request_target, match, user_agent_endpt))
 	{
 		std::regex_search(request, match, user_agent_val);
-		http_info["Content-Type"] = "Content-Type: text/plain";
-		http_info["Content-Length"] = "Content-Length: " + std::to_string(match[1].str().size());
+		http_info["Content-Type"] = "Content-Type: text/plain\r\n";
+		http_info["Content-Length"] = "Content-Length: " + std::to_string(match[1].str().size()) + "\r\n";
 		http_info["response_body"] = match[1].str();
-		http_info["status_code"] = " 200 OK";
+		http_info["status_code"] = " 200 OK\r\n";
 	}
 
 
 	else if (std::regex_match(request_target, match, files_endpt))
 	{
 		std::filesystem::path file_path = std::filesystem::path(files_endpt_dir) / std::filesystem::path(match[1].str());
-		http_info["Content-Type"] = "Content-Type: application/octet-stream";
+		http_info["Content-Type"] = "Content-Type: application/octet-stream\r\n";
 
 		if (request_type == "GET")
 		{
-			http_info["response_body"] = "";
-
 			if (std::filesystem::exists(file_path))
 			{
 				std::uintmax_t fileSize = std::filesystem::file_size(file_path);
-				http_info["Content-Length"] = "Content-Length: " + std::to_string(fileSize);
+				http_info["Content-Length"] = "Content-Length: " + std::to_string(fileSize) + "\r\n";
 
 				std::ifstream file(file_path.c_str());
 				std::string str;
@@ -145,7 +143,7 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 					http_info["response_body"] += str;
 				}
 
-				http_info["status_code"] = " 200 OK";
+				http_info["status_code"] = " 200 OK\r\n";
 			}
 		}
 		else if (request_type == "POST")
@@ -161,15 +159,16 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 				outputFile.close();
 			}
 
-			http_info["status_code"] = " 201 Created";
+			http_info["status_code"] = " 201 Created\r\n";
 		}
 	}
 
 	http_info["response"] = http_info["http_version"] + http_info["status_code"]
-		+ "\r\n" + http_info["Content-Type"]
+		+ http_info["Content-Type"]
 		+ http_info["encoding"]
-		+ "\r\n" + http_info["Content-Length"]
-		+ "\r\n\r\n" + http_info["response_body"];
+		+ http_info["Content-Length"]
+		+ "\r\n" //For end of headers
+		+ http_info["response_body"];
 
 	return http_info;
 }
@@ -201,6 +200,8 @@ void process_request(int client_socket, std::string files_endpt_dir)
 
 		// Convert request to string
 		std::string complete_request(buffer, bytes_received);
+
+		std::cout << complete_request << "\n";
 
 		auto http_info = parse_http_request(complete_request, files_endpt_dir);
 
