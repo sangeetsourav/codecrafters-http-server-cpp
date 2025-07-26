@@ -13,6 +13,7 @@
 #include <thread>
 #include <filesystem>
 #include <fstream>
+#include <map>
 
 std::map<std::string, std::string> parse_http_request(std::string request, std::string files_endpt_dir)
 {
@@ -30,6 +31,7 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 	http_info["http_version"] = http_version;
 	http_info["Content-Type"] = "";
 	http_info["Content-Length"] = "";
+	http_info["response_body"] = "";
 	http_info["request_body"] = "";
 	http_info["response"] = "";
 	http_info["status_code"] = " 404 Not Found";
@@ -40,49 +42,85 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 	std::regex echo_endpt(R"(\/echo\/(.*))");
 
 	// Regex to capture user-agent
-	std::regex user_agent_endpt(R"(user-agent: (.*)\r\n)", std::regex::icase);
+	std::regex user_agent_endpt(R"(\/user-agent)", std::regex::icase);
+	std::regex user_agent_val(R"(\r\nuser-agent: (.*)\r\n)", std::regex::icase);
 
 	// Regex to capture /files/{filename}
 	std::regex files_endpt(R"(\/files\/(.*))");
+
 	std::smatch match;
+
+	size_t body_start = request.find("\r\n\r\n");
+	if (body_start != std::string::npos) {
+		body_start += 4; // Skip past "\r\n\r\n"
+		http_info["request_body"] = request.substr(body_start);
+	}
 
 	if (http_info["request_target"] == "/")
 	{
 		http_info["status_code"] = " 200 OK";
 	}
 
-	else if (std::regex_match(request_target, match, echo_endpt) || std::regex_search(request, match, user_agent_endpt))
+	else if (std::regex_match(request_target, match, echo_endpt))
 	{
 		http_info["Content-Type"] = "Content-Type: text/plain";
 		http_info["Content-Length"] = "Content-Length: " + std::to_string(match[1].str().size());
-		http_info["request_body"] = match[1].str();
+		http_info["response_body"] = match[1].str();
 		http_info["status_code"] = " 200 OK";
 	}
+
+	else if (std::regex_match(request_target, match, user_agent_endpt))
+	{
+		std::regex_search(request, match, user_agent_val);
+		http_info["Content-Type"] = "Content-Type: text/plain";
+		http_info["Content-Length"] = "Content-Length: " + std::to_string(match[1].str().size());
+		http_info["response_body"] = match[1].str();
+		http_info["status_code"] = " 200 OK";
+	}
+
 
 	else if (std::regex_match(request_target, match, files_endpt))
 	{
 		std::filesystem::path file_path = std::filesystem::path(files_endpt_dir) / std::filesystem::path(match[1].str());
-
 		http_info["Content-Type"] = "Content-Type: application/octet-stream";
-		http_info["request_body"] = "";
-		
-		if (std::filesystem::exists(file_path))
-		{
-			std::uintmax_t fileSize = std::filesystem::file_size(file_path);
-			http_info["Content-Length"] = "Content-Length: " + std::to_string(fileSize);
 
-			std::ifstream file(file_path.c_str());
-			std::string str;
-			while (std::getline(file, str))
+		if (request_type == "GET")
+		{
+			http_info["response_body"] = "";
+
+			if (std::filesystem::exists(file_path))
 			{
-				http_info["request_body"] += str;
+				std::uintmax_t fileSize = std::filesystem::file_size(file_path);
+				http_info["Content-Length"] = "Content-Length: " + std::to_string(fileSize);
+
+				std::ifstream file(file_path.c_str());
+				std::string str;
+				while (std::getline(file, str))
+				{
+					http_info["response_body"] += str;
+				}
+
+				http_info["status_code"] = " 200 OK";
+			}
+		}
+		else if (request_type == "POST")
+		{
+			std::ofstream outputFile;
+
+			outputFile.open(file_path.c_str(), std::ios::out);
+
+			if (outputFile.is_open()) 
+			{
+				outputFile << http_info["request_body"];
+
+				outputFile.close();
 			}
 
-			http_info["status_code"] = " 200 OK";
+			http_info["status_code"] = " 201 Created";
 		}
 	}
 
-	http_info["response"] = http_info["http_version"] + http_info["status_code"] + "\r\n" + http_info["Content-Type"] + "\r\n" + http_info["Content-Length"] + "\r\n\r\n" + http_info["request_body"];
+	http_info["response"] = http_info["http_version"] + http_info["status_code"] + "\r\n" + http_info["Content-Type"] + "\r\n" + http_info["Content-Length"] + "\r\n\r\n" + http_info["response_body"];
 
 	return http_info;
 }
