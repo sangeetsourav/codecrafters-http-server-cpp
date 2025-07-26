@@ -179,18 +179,41 @@ void process_request(int client_socket, std::string files_endpt_dir)
 	// Buffer variable where the data is temporarily stored
 	char buffer[4096];
 
-	ssize_t bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+	while (true)
+	{
+		ssize_t bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
 
-	// Add null termination
-	buffer[bytes_received] = '\0';
+		// CRITICAL: Check for client disconnect or error
+		// This is important, so that when a client disconnects, we recognize it and break the loop
+		// If we don't recognize it then we will go on processing when we recieved 0 bytes, leading to undefined behaviour and crash the server, closing all other connections/threads also
+		if (bytes_received <= 0) {
+			if (bytes_received == 0) {
+				std::cout << "Client disconnected cleanly\n";
+			}
+			else {
+				std::cout << "recv() error: " << errno << "\n";
+			}
+			break;  // Exit the loop
+		}
 
-	// Convert request to string
-	std::string complete_request(buffer, bytes_received);
+		// Add null termination
+		buffer[bytes_received] = '\0';
 
-	auto http_info = parse_http_request(complete_request, files_endpt_dir);
+		// Convert request to string
+		std::string complete_request(buffer, bytes_received);
 
-	// Send response back
-	ssize_t bytes_sent = send(client_socket, http_info["response"].c_str(), http_info["response"].size(), 0);
+		auto http_info = parse_http_request(complete_request, files_endpt_dir);
+
+		// Send response back
+		ssize_t bytes_sent = send(client_socket, http_info["response"].c_str(), http_info["response"].size(), 0);
+
+		// Check if client wants to close connection
+		if (complete_request.find("Connection: close") != std::string::npos ||
+			http_info["http_version"] == "HTTP/1.0") {
+			std::cout << "Client requested connection close\n";
+			break;
+		}
+	}
 
 	close(client_socket); // Done with this client
 }
