@@ -1,38 +1,19 @@
-[![progress-banner](https://backend.codecrafters.io/progress/http-server/f1414e83-94a3-4556-8d94-5ea8349c612c)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+﻿# codecrafters-http-server-cpp
+ 
+An HTTP web server built from scratch in C++, as part of the Codecrafters HTTP Server challenge.
+The goal: understand how real shells work.
 
-This is a starting point for C++ solutions to the
-["Build Your Own HTTP server" Challenge](https://app.codecrafters.io/courses/http-server/overview).
+## ✨ Features implemented
 
-[HTTP](https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol) is the
-protocol that powers the web. In this challenge, you'll build a HTTP/1.1 server
-that is capable of serving multiple clients.
+✅ Bind and listen to a port
 
-Along the way you'll learn about TCP servers,
-[HTTP request syntax](https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html),
-and more.
+✅ Concurrent and persistent TCP client connections through C++ threads.
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+✅ GZip compression
 
-# Passing the first stage
+✅ Serve/Create static files based on GET/POST requests.
 
-The entry point for your HTTP server implementation is in `src/server.cpp`.
-Study and uncomment the relevant code, and push your changes to pass the first
-stage:
+✅ Send standard HTTP responses to clients
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
-```
+(Work in progress — more features planned!)
 
-Time to move on to the next stage!
-
-# Stage 2 & beyond
-
-Note: This section is for stages 2 and beyond.
-
-1. Ensure you have `cmake` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `src/server.cpp`.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
