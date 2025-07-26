@@ -125,8 +125,9 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 	}
 
 	if (std::regex_search(request, match, accept_encoding_val))
-	{
-		if (match[1].str() == "gzip")
+	{	
+		std::string encodings = match[1].str();
+		if (std::regex_search(encodings, match, std::regex(R"(gzip)")))
 		{
 			http_info["encoding"] = "\r\nContent-Encoding: gzip";
 		} 
