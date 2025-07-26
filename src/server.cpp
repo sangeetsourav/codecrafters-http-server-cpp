@@ -31,6 +31,7 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 	http_info["http_version"] = http_version;
 	http_info["Content-Type"] = "";
 	http_info["Content-Length"] = "";
+	http_info["encoding"] = "";
 	http_info["response_body"] = "";
 	http_info["request_body"] = "";
 	http_info["response"] = "";
@@ -47,6 +48,9 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 
 	// Regex to capture /files/{filename}
 	std::regex files_endpt(R"(\/files\/(.*))");
+
+	// Regex to capture Accept-Encoding
+	std::regex accept_encoding_val(R"(\r\naccept-encoding: (.*)\r\n)", std::regex::icase);
 
 	std::smatch match;
 
@@ -120,7 +124,19 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 		}
 	}
 
-	http_info["response"] = http_info["http_version"] + http_info["status_code"] + "\r\n" + http_info["Content-Type"] + "\r\n" + http_info["Content-Length"] + "\r\n\r\n" + http_info["response_body"];
+	if (std::regex_search(request, match, accept_encoding_val))
+	{
+		if (match[1].str() == "gzip")
+		{
+			http_info["encoding"] = "\r\nContent-Encoding: gzip";
+		} 
+	}
+
+	http_info["response"] = http_info["http_version"] + http_info["status_code"]
+		+ "\r\n" + http_info["Content-Type"]
+		+ http_info["encoding"]
+		+ "\r\n" + http_info["Content-Length"]
+		+ "\r\n\r\n" + http_info["response_body"];
 
 	return http_info;
 }
