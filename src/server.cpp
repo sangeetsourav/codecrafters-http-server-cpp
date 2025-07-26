@@ -14,6 +14,79 @@
 #include <filesystem>
 #include <fstream>
 
+std::map<std::string, std::string> parse_http_request(std::string request, std::string files_endpt_dir)
+{
+	std::map<std::string, std::string> http_info;
+
+	std::istringstream ss(request);
+
+	std::string request_type, request_target, http_version;
+
+	// The following are the first three space delimited tokens
+	ss >> request_type >> request_target >> http_version;
+
+	http_info["request_type"] = request_type;
+	http_info["request_target"] = request_target;
+	http_info["http_version"] = http_version;
+	http_info["Content-Type"] = "";
+	http_info["Content-Length"] = "";
+	http_info["request_body"] = "";
+	http_info["response"] = "";
+	http_info["status_code"] = " 404 Not Found";
+
+	std::string request_status = "";
+
+	// Regex to capture /echo/{string}
+	std::regex echo_endpt(R"(\/echo\/(.*))");
+
+	// Regex to capture user-agent
+	std::regex user_agent_endpt(R"(user-agent: (.*)\r\n)", std::regex::icase);
+
+	// Regex to capture /files/{filename}
+	std::regex files_endpt(R"(\/files\/(.*))");
+	std::smatch match;
+
+	if (http_info["request_target"] == "/")
+	{
+		http_info["status_code"] = " 200 OK";
+	}
+
+	else if (std::regex_match(request_target, match, echo_endpt) || std::regex_search(request, match, user_agent_endpt))
+	{
+		http_info["Content-Type"] = "Content-Type: text/plain";
+		http_info["Content-Length"] = "Content-Length: " + std::to_string(match[1].str().size());
+		http_info["request_body"] = match[1].str();
+		http_info["status_code"] = " 200 OK";
+	}
+
+	else if (std::regex_match(request_target, match, files_endpt))
+	{
+		std::filesystem::path file_path = std::filesystem::path(files_endpt_dir) / std::filesystem::path(match[1].str());
+
+		http_info["Content-Type"] = "Content-Type: application/octet-stream";
+		http_info["request_body"] = "";
+		
+		if (std::filesystem::exists(file_path))
+		{
+			std::uintmax_t fileSize = std::filesystem::file_size(file_path);
+			http_info["Content-Length"] = "Content-Length: " + std::to_string(fileSize);
+
+			std::ifstream file(file_path.c_str());
+			std::string str;
+			while (std::getline(file, str))
+			{
+				http_info["request_body"] += str;
+			}
+
+			http_info["status_code"] = " 200 OK";
+		}
+	}
+
+	http_info["response"] = http_info["http_version"] + http_info["status_code"] + "\r\n" + http_info["Content-Type"] + "\r\n" + http_info["Content-Length"] + "\r\n\r\n" + http_info["request_body"];
+
+	return http_info;
+}
+
 void process_request(int client_socket, std::string files_endpt_dir)
 {
 	// Buffer variable where the data is temporarily stored
@@ -27,72 +100,10 @@ void process_request(int client_socket, std::string files_endpt_dir)
 	// Convert request to string
 	std::string complete_request(buffer, bytes_received);
 
-	std::istringstream ss(complete_request);
-
-	std::string request_type, request_target, http_version;
-
-	// The following are the first three space delimited tokens
-	ss >> request_type >> request_target >> http_version;
-
-	std::string response;
-
-	// Regex to capture /echo/{string}
-	std::regex echo_endpt(R"(\/echo\/(.*))");
-	// Regex to capture user-agent
-	std::regex user_agent_endpt(R"(user-agent: (.*)\r\n)", std::regex::icase);
-	// Regex to capture /files/{filename}
-	std::regex files_endpt(R"(\/files\/(.*))");
-	std::smatch match;
-
-	if (request_target == "/")
-	{
-		response = "HTTP/1.1 200 OK\r\n\r\n";
-	}
-	else if (std::regex_match(request_target, match, echo_endpt))
-	{
-		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
-			+ std::to_string(match[1].str().size())
-			+ std::string("\r\n\r\n") + match[1].str();
-	}
-	else if (std::regex_match(request_target, match, files_endpt))
-	{
-		std::filesystem::path file_path = std::filesystem::path(files_endpt_dir) / std::filesystem::path(match[1].str());
-		
-		if (std::filesystem::exists(file_path))
-		{
-			std::uintmax_t fileSize = std::filesystem::file_size(file_path);
-
-			response = std::string("HTTP/1.1 200 OK\r\nContent-Type:application/octet-stream\r\nContent-Length: ")
-				+ std::to_string(fileSize)
-				+ std::string("\r\n\r\n");
-
-			std::ifstream file(file_path.c_str());
-			std::string str;
-			while (std::getline(file, str))
-			{
-				response += str;
-			}
-
-		}
-		else
-		{
-			response = "HTTP/1.1 404 Not Found\r\n\r\n";
-		}
-		
-	}
-	else if (std::regex_search(complete_request, match, user_agent_endpt))
-	{
-		response = std::string("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: ")
-			+ std::to_string(match[1].str().size())
-			+ std::string("\r\n\r\n") + match[1].str();
-	}
-	else
-	{
-		response = "HTTP/1.1 404 Not Found\r\n\r\n";
-	}
+	auto http_info = parse_http_request(complete_request, files_endpt_dir);
 
 	// Send response back
-	ssize_t bytes_sent = send(client_socket, response.c_str(), response.size(), 0);
+	ssize_t bytes_sent = send(client_socket, http_info["response"].c_str(), http_info["response"].size(), 0);
 
 	close(client_socket); // Done with this client
 }
