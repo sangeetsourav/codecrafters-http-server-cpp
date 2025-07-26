@@ -52,6 +52,7 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 	http_info["http_version"] = http_version;
 	http_info["Content-Type"] = "";
 	http_info["Content-Length"] = "";
+	http_info["Connection"] = "";
 	http_info["encoding"] = "";
 	http_info["response_body"] = "";
 	http_info["request_body"] = "";
@@ -73,12 +74,23 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 	// Regex to capture Accept-Encoding
 	std::regex accept_encoding_val(R"(\r\naccept-encoding: (.*)\r\n)", std::regex::icase);
 
+	// Regex to capture Connection
+	std::regex connection_val(R"(\r\nconnection: (.*)\r\n)", std::regex::icase);
+
 	std::smatch match;
 
 	size_t body_start = request.find("\r\n\r\n");
 	if (body_start != std::string::npos) {
 		body_start += 4; // Skip past "\r\n\r\n"
 		http_info["request_body"] = request.substr(body_start);
+	}
+
+	if (std::regex_search(request, match, connection_val))
+	{
+		if (match[1].str() == "close")
+		{
+			http_info["Connection"] = "Connection: " + match[1].str() + "\r\n";
+		}
 	}
 
 	if (http_info["request_target"] == "/")
@@ -167,6 +179,7 @@ std::map<std::string, std::string> parse_http_request(std::string request, std::
 		+ http_info["Content-Type"]
 		+ http_info["encoding"]
 		+ http_info["Content-Length"]
+		+ http_info["Connection"]
 		+ "\r\n" //For end of headers
 		+ http_info["response_body"];
 
